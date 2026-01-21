@@ -1,207 +1,230 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Inventario PRO · Quagga</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inventario Pro v8 - Quagga Engine</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
+    <style>
+        :root { --accent: #00ff88; }
+        body { background: #121212; color: #e0e0e0; font-family: 'Inter', sans-serif; }
+        
+        /* Contenedor de cámara profesional */
+        #interactive.viewport {
+            position: relative; width: 100%; height: 320px;
+            overflow: hidden; border-radius: 20px;
+            background: #000; border: 2px solid #333;
+        }
+        #interactive.viewport video, canvas { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
+        
+        /* Línea de escaneo láser */
+        .laser {
+            position: absolute; top: 50%; left: 10%; right: 10%;
+            height: 3px; background: var(--accent);
+            box-shadow: 0 0 15px var(--accent);
+            z-index: 10; animation: scan 2s infinite ease-in-out;
+            pointer-events: none;
+        }
+        @keyframes scan { 0%, 100% { transform: translateY(-40px); opacity: 0.5; } 50% { transform: translateY(40px); opacity: 1; } }
 
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-
-  <!-- Quagga2 -->
-  <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
+        /* Tarjetas y UI */
+        .card-custom { background: #1e1e1e; border: 1px solid #333; border-radius: 15px; margin-top: -30px; z-index: 100; position: relative; }
+        .btn-primary-custom { background: var(--accent); color: #000; font-weight: 700; border: none; border-radius: 10px; padding: 12px; transition: 0.3s; }
+        .btn-primary-custom:active { transform: scale(0.95); opacity: 0.8; }
+        .product-row { border-bottom: 1px solid #333; padding: 12px 0; }
+        .badge-stock { background: #2d2d2d; color: var(--accent); border: 1px solid var(--accent); }
+    </style>
 </head>
-<body class="bg-slate-100 text-slate-800">
+<body>
 
-<!-- HEADER -->
-<header class="bg-slate-900 text-white px-4 py-3 flex justify-between items-center">
-  <h1 class="text-lg font-semibold">📦 Inventario PRO</h1>
-  <button onclick="openScanner()" class="bg-emerald-500 px-4 py-2 rounded-lg font-medium">
-    <i class="fa fa-barcode"></i>
-  </button>
-</header>
-
-<!-- CONTENT -->
-<main class="p-4 space-y-4">
-  <div class="flex justify-between items-center">
-    <h2 class="font-semibold">Inventario</h2>
-    <button onclick="exportPDF()" class="text-sm bg-red-500 text-white px-3 py-2 rounded-lg">
-      <i class="fa fa-file-pdf"></i> PDF
-    </button>
-  </div>
-
-  <div class="overflow-x-auto bg-white rounded-xl shadow">
-    <table class="min-w-full text-sm">
-      <thead class="bg-slate-200">
-        <tr>
-          <th class="px-3 py-2 text-left">Código</th>
-          <th class="px-3 py-2">Producto</th>
-          <th class="px-3 py-2">Cantidad</th>
-          <th class="px-3 py-2">Ubicación</th>
-        </tr>
-      </thead>
-      <tbody id="inventoryTable"></tbody>
-    </table>
-  </div>
-</main>
-
-<!-- SCANNER MODAL -->
-<div id="scannerModal" class="fixed inset-0 bg-black/90 hidden z-50">
-  <div class="absolute top-4 right-4 z-50">
-    <button onclick="closeScanner()" class="text-white text-2xl">✕</button>
-  </div>
-  <div id="scanner" class="w-full h-full"></div>
-</div>
-
-<!-- PRODUCT MODAL -->
-<div id="productModal" class="fixed inset-0 bg-black/50 hidden z-40 flex items-center justify-center">
-  <div class="bg-white rounded-xl w-11/12 max-w-sm p-4 space-y-3">
-    <h3 id="productTitle" class="font-semibold">Producto</h3>
-    <input id="prodCode" type="hidden" />
-    <input id="prodName" placeholder="Nombre del producto" class="w-full border p-2 rounded" />
-
-    <div class="flex gap-2">
-      <input id="prodQty" type="number" value="1" min="1" class="w-1/2 border p-2 rounded" />
-      <select id="prodUnit" class="w-1/2 border p-2 rounded">
-        <option value="unidad">Unidad</option>
-        <option value="caja">Caja</option>
-        <option value="kg">Kg</option>
-        <option value="g">Gramos</option>
-        <option value="litro">Litro</option>
-        <option value="ml">ml</option>
-        <option value="botella">Botella</option>
-        <option value="saco">Saco</option>
-      </select>
+<div class="container-fluid p-0">
+    <div id="interactive" class="viewport">
+        <div class="laser"></div>
     </div>
 
-    <input id="prodLoc" placeholder="Ubicación" class="w-full border p-2 rounded" />
+    <div class="container">
+        <div class="card card-custom shadow-lg">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="m-0 fw-bold text-white">Gestor de Stock</h5>
+                    <div id="status" class="badge bg-danger">Cámara Off</div>
+                </div>
+                
+                <div class="d-grid gap-2 mb-4">
+                    <button id="btn-toggle" class="btn btn-primary-custom" onclick="toggleScanner()">🚀 ACTIVAR ESCÁNER</button>
+                </div>
 
-    <button onclick="saveProduct()" class="w-full bg-emerald-500 text-white py-2 rounded">Guardar</button>
-  </div>
+                <div id="inventory-list" style="max-height: 350px; overflow-y: auto;">
+                    </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+<div class="modal fade" id="adjustModal" tabindex="-1" aria-hidden="true" data-bs-theme="dark">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-body p-4">
+                <div id="new-item-form" style="display:none;">
+                    <h4 class="text-info mb-3">Nuevo Producto</h4>
+                    <input type="text" id="p-name" class="form-control mb-3 bg-dark border-secondary text-white" placeholder="Nombre del artículo">
+                    <select id="p-unit" class="form-select mb-3 bg-dark border-secondary text-white">
+                        <option value="Unid.">Unidad</option>
+                        <option value="Litros">Litro</option>
+                        <option value="Cajas">Caja</option>
+                    </select>
+                </div>
+                <div id="existing-item-info" class="text-center">
+                    <h3 id="m-name" class="fw-bold mb-1 text-white"></h3>
+                    <p id="m-stock" class="text-muted"></p>
+                </div>
+                
+                <div class="input-group input-group-lg my-4">
+                    <button class="btn btn-outline-secondary" onclick="adj(-1)">-</button>
+                    <input type="number" id="m-input" class="form-control text-center bg-transparent text-white border-secondary" value="1">
+                    <button class="btn btn-outline-secondary" onclick="adj(1)">+</button>
+                </div>
+                
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary-custom py-3" onclick="save()">GUARDAR EN INVENTARIO</button>
+                    <button class="btn btn-link text-muted" onclick="closeModal()">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-let inventory = JSON.parse(localStorage.getItem('inventory') || '[]');
-let scanning = false;
+    let inventory = JSON.parse(localStorage.getItem('inv_v8')) || {};
+    let activeCode = null;
+    let isRunning = false;
+    const modal = new bootstrap.Modal(document.getElementById('adjustModal'));
 
-function render(){
-  const tbody = document.getElementById('inventoryTable');
-  tbody.innerHTML = '';
-  inventory.forEach(p => {
-    tbody.innerHTML += `
-      <tr class="border-t">
-        <td class="px-3 py-2">${p.code}</td>
-        <td class="px-3 py-2">${p.name}</td>
-        <td class="px-3 py-2 text-center">${p.qty} ${p.unit}</td>
-        <td class="px-3 py-2">${p.loc}</td>
-      </tr>`;
-  });
-  localStorage.setItem('inventory', JSON.stringify(inventory));
-}
-render();
+    // --- MOTOR DE SONIDO (BEEP) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep() {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = "sine";
+        osc.frequency.value = 880; // Tono alto
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.1);
+        osc.stop(audioCtx.currentTime + 0.1);
+    }
 
-function openScanner(){
-  document.getElementById('scannerModal').classList.remove('hidden');
-  startScanner();
-}
+    function toggleScanner() {
+        if (isRunning) {
+            Quagga.stop();
+            isRunning = false;
+            updateStatus(false);
+        } else {
+            initQuagga();
+        }
+    }
 
-function closeScanner(){
-  document.getElementById('scannerModal').classList.add('hidden');
-  stopScanner();
-}
+    function updateStatus(on) {
+        const btn = document.getElementById('btn-toggle');
+        const badge = document.getElementById('status');
+        btn.innerText = on ? "🛑 DETENER CÁMARA" : "🚀 ACTIVAR ESCÁNER";
+        btn.className = on ? "btn btn-danger w-100 p-3" : "btn btn-primary-custom";
+        badge.innerText = on ? "Escaneando..." : "Cámara Off";
+        badge.className = on ? "badge bg-success" : "badge bg-danger";
+    }
 
-function startScanner(){
-  if(scanning) return;
-  scanning = true;
+    function initQuagga() {
+        Quagga.init({
+            inputStream: {
+                type: "LiveStream",
+                target: document.querySelector('#interactive'),
+                constraints: { facingMode: "environment", aspectRatio: {ideal: 1} }
+            },
+            locator: { patchSize: "medium", halfSample: true },
+            decoder: { readers: ["ean_reader", "code_128_reader", "upc_reader"] },
+            locate: true // Dibuja recuadros para ayudar al enfoque
+        }, (err) => {
+            if (err) return console.error(err);
+            Quagga.start();
+            isRunning = true;
+            updateStatus(true);
+        });
 
-  Quagga.init({
-    inputStream:{
-      type:'LiveStream',
-      target:document.querySelector('#scanner'),
-      constraints:{ facingMode:'environment' }
-    },
-    locator:{ patchSize:'large', halfSample:false },
-    numOfWorkers:navigator.hardwareConcurrency || 4,
-    decoder:{ readers:['ean_reader','ean_8_reader','code_128_reader','upc_reader','code_39_reader'] },
-    locate:true
-  }, err => {
-    if(err){ console.error(err); return; }
-    Quagga.start();
-  });
+        // Dibujar indicadores de enfoque en tiempo real
+        Quagga.onProcessed(result => {
+            const drawingCtx = Quagga.canvas.ctx.overlay;
+            const drawingCanvas = Quagga.canvas.dom.overlay;
+            if (result) {
+                if (result.boxes) {
+                    drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                    result.boxes.filter(box => box !== result.box).forEach(box => {
+                        Quagga.ImageDebug.drawPath(box, { x: 0, y: 1 }, drawingCtx, { color: "green", lineWidth: 2 });
+                    });
+                }
+            }
+        });
 
-  Quagga.offDetected();
-  Quagga.onDetected(res => {
-    const code = res.codeResult.code;
-    navigator.vibrate?.(200);
-    stopScanner();
-    closeScanner();
-    openProduct(code);
-  });
-}
+        Quagga.onDetected(res => {
+            if (activeCode) return;
+            playBeep();
+            if (navigator.vibrate) navigator.vibrate(100);
+            activeCode = res.codeResult.code;
+            openModal(activeCode);
+        });
+    }
 
-function stopScanner(){
-  if(!scanning) return;
-  scanning = false;
-  Quagga.stop();
-}
+    function openModal(code) {
+        Quagga.stop();
+        document.getElementById('m-input').value = 1;
+        if (inventory[code]) {
+            document.getElementById('new-item-form').style.display = 'none';
+            document.getElementById('existing-item-info').style.display = 'block';
+            document.getElementById('m-name').innerText = inventory[code].name;
+            document.getElementById('m-stock').innerText = `Stock: ${inventory[code].stock} ${inventory[code].unit}`;
+        } else {
+            document.getElementById('new-item-form').style.display = 'block';
+            document.getElementById('existing-item-info').style.display = 'none';
+        }
+        modal.show();
+    }
 
-function openProduct(code){
-  const p = inventory.find(i => i.code === code);
-  prodCode.value = code;
+    function save() {
+        const qty = parseInt(document.getElementById('m-input').value);
+        if (inventory[activeCode]) {
+            inventory[activeCode].stock += qty;
+        } else {
+            const name = document.getElementById('p-name').value;
+            if (!name) return alert("Ingresa nombre");
+            inventory[activeCode] = { name: name, unit: document.getElementById('p-unit').value, stock: qty };
+        }
+        localStorage.setItem('inv_v8', JSON.stringify(inventory));
+        renderList();
+        closeModal();
+    }
 
-  if(p){
-    productTitle.innerText = 'Sumar stock';
-    prodName.value = p.name;
-    prodUnit.value = p.unit;
-    prodQty.value = 1;
-    prodLoc.value = p.loc;
-  } else {
-    productTitle.innerText = 'Nuevo producto';
-    prodName.value = '';
-    prodUnit.value = 'unidad';
-    prodQty.value = 1;
-    prodLoc.value = '';
-  }
+    function renderList() {
+        const container = document.getElementById('inventory-list');
+        container.innerHTML = "";
+        Object.keys(inventory).reverse().forEach(id => {
+            const p = inventory[id];
+            container.innerHTML += `
+                <div class="product-row d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-bold text-white">${p.name}</div>
+                        <small class="text-muted">${id}</small>
+                    </div>
+                    <span class="badge badge-stock px-3 py-2 fs-6">${p.stock}</span>
+                </div>`;
+        });
+    }
 
-  document.getElementById('productModal').classList.remove('hidden');
-}
+    function adj(v) { document.getElementById('m-input').value = parseInt(document.getElementById('m-input').value) + v; }
+    function closeModal() { modal.hide(); activeCode = null; if (isRunning) initQuagga(); }
 
-function saveProduct(){
-  const code = prodCode.value;
-  const qty = Number(prodQty.value);
-  let p = inventory.find(i => i.code === code);
-
-  if(p){
-    p.qty += qty;
-  } else {
-    inventory.push({
-      code,
-      name: prodName.value,
-      qty,
-      unit: prodUnit.value,
-      loc: prodLoc.value
-    });
-  }
-
-  document.getElementById('productModal').classList.add('hidden');
-  render();
-}
-
-function exportPDF(){
-  const doc = new jspdf.jsPDF();
-  doc.text('Inventario PRO',14,15);
-  doc.autoTable({
-    head:[['Código','Producto','Cantidad','Ubicación']],
-    body:inventory.map(p=>[p.code,p.name,`${p.qty} ${p.unit}`,p.loc])
-  });
-  doc.save('inventario.pdf');
-}
+    renderList();
 </script>
 </body>
 </html>
