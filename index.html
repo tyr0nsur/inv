@@ -1,187 +1,138 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Inventario con Escáner (FUNCIONAL)</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Inventario PRO · ZXing</title>
 
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
-<style>
-body{background:#f4f6f9}
-#scanner{width:100%;height:100%;overflow:hidden}
-#scanner video{width:100%;height:auto}
-.scan-line{position:absolute;top:50%;left:0;width:100%;height:2px;background:red;z-index:10}
-</style>
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <!-- ZXing WASM -->
+  <script src="https://unpkg.com/@zxing/library@0.21.0"></script>
 </head>
-<body>
+<body class="bg-slate-100 text-slate-800">
 
-<nav class="navbar navbar-dark bg-dark">
-  <div class="container-fluid">
-    <span class="navbar-brand">📦 Inventario</span>
-    <button class="btn btn-success" onclick="openScanner()"><i class="fa fa-barcode"></i> Escanear</button>
+<!-- HEADER -->
+<header class="bg-black text-white px-4 py-3 flex justify-between items-center">
+  <h1 class="text-lg font-semibold">📦 Inventario PRO</h1>
+  <button onclick="openScanner()" class="bg-emerald-500 px-4 py-2 rounded-lg font-medium">
+    <i class="fa fa-barcode"></i>
+  </button>
+</header>
+
+<!-- CONTENT -->
+<main class="p-4 space-y-4">
+  <div class="flex justify-between items-center">
+    <h2 class="font-semibold">Inventario</h2>
+    <button onclick="exportPDF()" class="text-sm bg-red-500 text-white px-3 py-2 rounded-lg">
+      <i class="fa fa-file-pdf"></i> PDF
+    </button>
   </div>
-</nav>
 
-<div class="container mt-4">
-  <div class="d-flex justify-content-between mb-3">
-    <h5>Inventario</h5>
-    <button class="btn btn-danger" onclick="exportPDF()"><i class="fa fa-file-pdf"></i> PDF</button>
+  <div class="overflow-x-auto bg-white rounded-xl shadow">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-200">
+        <tr>
+          <th class="px-3 py-2 text-left">Código</th>
+          <th class="px-3 py-2">Producto</th>
+          <th class="px-3 py-2">Qty</th>
+          <th class="px-3 py-2">Ubicación</th>
+        </tr>
+      </thead>
+      <tbody id="inventoryTable"></tbody>
+    </table>
   </div>
+</main>
 
-  <table id="inventoryTable" class="table table-striped table-bordered">
-    <thead>
-      <tr>
-        <th>Código</th>
-        <th>Producto</th>
-        <th>Cantidad</th>
-        <th>Ubicación</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<!-- SCANNER MODAL -->
+<div id="scannerModal" class="fixed inset-0 bg-black/90 hidden z-50">
+  <div class="absolute top-4 right-4">
+    <button onclick="closeScanner()" class="text-white text-2xl">✕</button>
+  </div>
+  <video id="video" class="w-full h-full object-cover"></video>
 </div>
 
-<!-- MODAL SCANNER -->
-<div class="modal fade" id="scannerModal" tabindex="-1">
-  <div class="modal-dialog modal-fullscreen">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5>Escanear código</h5>
-        <button class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body p-0 position-relative">
-        <div id="scanner"></div>
-        <div class="scan-line"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL PRODUCTO -->
-<div class="modal fade" id="productModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5>Producto</h5>
-        <button class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <input type="hidden" id="prodCode">
-        <div class="mb-2"><label>Nombre</label><input class="form-control" id="prodName"></div>
-        <div class="mb-2"><label>Cantidad</label><input type="number" class="form-control" id="prodQty" value="1"></div>
-        <div class="mb-2"><label>Ubicación</label><input class="form-control" id="prodLoc"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" onclick="saveProduct()">Guardar</button>
-      </div>
-    </div>
+<!-- PRODUCT MODAL -->
+<div id="productModal" class="fixed inset-0 bg-black/50 hidden z-40 flex items-center justify-center">
+  <div class="bg-white rounded-xl w-11/12 max-w-sm p-4 space-y-3">
+    <h3 class="font-semibold">Producto</h3>
+    <input id="prodCode" type="hidden" />
+    <input id="prodName" placeholder="Nombre" class="w-full border p-2 rounded" />
+    <input id="prodQty" type="number" value="1" class="w-full border p-2 rounded" />
+    <input id="prodLoc" placeholder="Ubicación" class="w-full border p-2 rounded" />
+    <button onclick="saveProduct()" class="w-full bg-emerald-500 text-white py-2 rounded">Guardar</button>
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
 <script>
 let inventory = JSON.parse(localStorage.getItem('inventory') || '[]');
-let table;
-let scanning = false;
+let codeReader;
 
-$(document).ready(() => {
-  table = $('#inventoryTable').DataTable();
-  renderTable();
-});
-
-function renderTable(){
-  table.clear();
-  inventory.forEach(p=>{
-    table.row.add([
-      p.code,
-      p.name,
-      p.qty,
-      p.loc,
-      `<button class='btn btn-sm btn-warning' onclick='editProduct("${p.code}")'><i class='fa fa-edit'></i></button>`
-    ]);
+function render(){
+  const tbody = document.getElementById('inventoryTable');
+  tbody.innerHTML = '';
+  inventory.forEach(p => {
+    tbody.innerHTML += `
+      <tr class="border-t">
+        <td class="px-3 py-2">${p.code}</td>
+        <td class="px-3 py-2">${p.name}</td>
+        <td class="px-3 py-2 text-center">${p.qty}</td>
+        <td class="px-3 py-2">${p.loc}</td>
+      </tr>`;
   });
-  table.draw();
   localStorage.setItem('inventory', JSON.stringify(inventory));
 }
+render();
 
-function openScanner(){
-  new bootstrap.Modal(scannerModal).show();
+async function openScanner(){
+  document.getElementById('scannerModal').classList.remove('hidden');
+  codeReader = new ZXing.BrowserMultiFormatReader();
+  const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+  const backCam = devices.find(d => d.label.toLowerCase().includes('back')) || devices[0];
+
+  codeReader.decodeFromVideoDevice(backCam.deviceId, 'video', (res, err) => {
+    if(res){
+      navigator.vibrate?.(200);
+      closeScanner();
+      openProduct(res.text);
+    }
+  });
 }
-
-scannerModal.addEventListener('shown.bs.modal', ()=>{
-  if(scanning) return;
-  scanning = true;
-
-  Quagga.init({
-    inputStream:{
-      type:'LiveStream',
-      target:document.querySelector('#scanner'),
-      constraints:{
-        facingMode:'environment',
-        width:640,
-        height:480
-      }
-    },
-    locator:{ patchSize:'large', halfSample:true },
-    decoder:{ readers:['ean_reader','ean_8_reader','code_128_reader','upc_reader'] },
-    locate:true
-  }, err=>{
-    if(err){console.error(err);return;}
-    Quagga.start();
-  });
-
-  Quagga.offDetected();
-  Quagga.onDetected(data=>{
-    const code = data.codeResult.code;
-    navigator.vibrate?.(200);
-    closeScanner();
-    openProductModal(code);
-  });
-});
-
-scannerModal.addEventListener('hidden.bs.modal', closeScanner);
 
 function closeScanner(){
-  if(!scanning) return;
-  scanning = false;
-  Quagga.stop();
+  document.getElementById('scannerModal').classList.add('hidden');
+  if(codeReader) codeReader.reset();
 }
 
-function openProductModal(code){
-  const p = inventory.find(i=>i.code===code);
+function openProduct(code){
+  const p = inventory.find(i => i.code === code);
   prodCode.value = code;
   prodName.value = p?.name || '';
   prodQty.value = p?.qty || 1;
   prodLoc.value = p?.loc || '';
-  new bootstrap.Modal(productModal).show();
+  productModal.classList.remove('hidden');
 }
 
 function saveProduct(){
   const code = prodCode.value;
-  let p = inventory.find(i=>i.code===code);
+  let p = inventory.find(i => i.code === code);
   if(p){ p.name=prodName.value; p.qty=prodQty.value; p.loc=prodLoc.value; }
   else inventory.push({code,name:prodName.value,qty:prodQty.value,loc:prodLoc.value});
-  renderTable();
-  bootstrap.Modal.getInstance(productModal).hide();
+  productModal.classList.add('hidden');
+  render();
 }
-
-function editProduct(code){ openProductModal(code); }
 
 function exportPDF(){
   const doc = new jspdf.jsPDF();
-  doc.text('Inventario',14,15);
-  doc.autoTable({head:[['Código','Producto','Cantidad','Ubicación']],body:inventory.map(p=>[p.code,p.name,p.qty,p.loc])});
+  doc.text('Inventario PRO',14,15);
+  doc.autoTable({ head:[['Código','Producto','Cantidad','Ubicación']], body:inventory.map(p=>[p.code,p.name,p.qty,p.loc]) });
   doc.save('inventario.pdf');
 }
 </script>
