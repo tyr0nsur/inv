@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Inventario PRO · ZXing</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Inventario PRO · Quagga</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -11,13 +11,13 @@
   <!-- Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
-  <!-- ZXing WASM -->
-  <script src="https://unpkg.com/@zxing/library@0.21.0"></script>
+  <!-- Quagga2 -->
+  <script src="https://unpkg.com/@ericblade/quagga2/dist/quagga.min.js"></script>
 </head>
 <body class="bg-slate-100 text-slate-800">
 
 <!-- HEADER -->
-<header class="bg-black text-white px-4 py-3 flex justify-between items-center">
+<header class="bg-slate-900 text-white px-4 py-3 flex justify-between items-center">
   <h1 class="text-lg font-semibold">📦 Inventario PRO</h1>
   <button onclick="openScanner()" class="bg-emerald-500 px-4 py-2 rounded-lg font-medium">
     <i class="fa fa-barcode"></i>
@@ -39,7 +39,7 @@
         <tr>
           <th class="px-3 py-2 text-left">Código</th>
           <th class="px-3 py-2">Producto</th>
-          <th class="px-3 py-2">Qty</th>
+          <th class="px-3 py-2">Cantidad</th>
           <th class="px-3 py-2">Ubicación</th>
         </tr>
       </thead>
@@ -50,20 +50,35 @@
 
 <!-- SCANNER MODAL -->
 <div id="scannerModal" class="fixed inset-0 bg-black/90 hidden z-50">
-  <div class="absolute top-4 right-4">
+  <div class="absolute top-4 right-4 z-50">
     <button onclick="closeScanner()" class="text-white text-2xl">✕</button>
   </div>
-  <video id="video" class="w-full h-full object-cover"></video>
+  <div id="scanner" class="w-full h-full"></div>
 </div>
 
 <!-- PRODUCT MODAL -->
 <div id="productModal" class="fixed inset-0 bg-black/50 hidden z-40 flex items-center justify-center">
   <div class="bg-white rounded-xl w-11/12 max-w-sm p-4 space-y-3">
-    <h3 class="font-semibold">Producto</h3>
+    <h3 id="productTitle" class="font-semibold">Producto</h3>
     <input id="prodCode" type="hidden" />
-    <input id="prodName" placeholder="Nombre" class="w-full border p-2 rounded" />
-    <input id="prodQty" type="number" value="1" class="w-full border p-2 rounded" />
+    <input id="prodName" placeholder="Nombre del producto" class="w-full border p-2 rounded" />
+
+    <div class="flex gap-2">
+      <input id="prodQty" type="number" value="1" min="1" class="w-1/2 border p-2 rounded" />
+      <select id="prodUnit" class="w-1/2 border p-2 rounded">
+        <option value="unidad">Unidad</option>
+        <option value="caja">Caja</option>
+        <option value="kg">Kg</option>
+        <option value="g">Gramos</option>
+        <option value="litro">Litro</option>
+        <option value="ml">ml</option>
+        <option value="botella">Botella</option>
+        <option value="saco">Saco</option>
+      </select>
+    </div>
+
     <input id="prodLoc" placeholder="Ubicación" class="w-full border p-2 rounded" />
+
     <button onclick="saveProduct()" class="w-full bg-emerald-500 text-white py-2 rounded">Guardar</button>
   </div>
 </div>
@@ -73,7 +88,7 @@
 
 <script>
 let inventory = JSON.parse(localStorage.getItem('inventory') || '[]');
-let codeReader;
+let scanning = false;
 
 function render(){
   const tbody = document.getElementById('inventoryTable');
@@ -83,7 +98,7 @@ function render(){
       <tr class="border-t">
         <td class="px-3 py-2">${p.code}</td>
         <td class="px-3 py-2">${p.name}</td>
-        <td class="px-3 py-2 text-center">${p.qty}</td>
+        <td class="px-3 py-2 text-center">${p.qty} ${p.unit}</td>
         <td class="px-3 py-2">${p.loc}</td>
       </tr>`;
   });
@@ -91,48 +106,100 @@ function render(){
 }
 render();
 
-async function openScanner(){
+function openScanner(){
   document.getElementById('scannerModal').classList.remove('hidden');
-  codeReader = new ZXing.BrowserMultiFormatReader();
-  const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-  const backCam = devices.find(d => d.label.toLowerCase().includes('back')) || devices[0];
-
-  codeReader.decodeFromVideoDevice(backCam.deviceId, 'video', (res, err) => {
-    if(res){
-      navigator.vibrate?.(200);
-      closeScanner();
-      openProduct(res.text);
-    }
-  });
+  startScanner();
 }
 
 function closeScanner(){
   document.getElementById('scannerModal').classList.add('hidden');
-  if(codeReader) codeReader.reset();
+  stopScanner();
+}
+
+function startScanner(){
+  if(scanning) return;
+  scanning = true;
+
+  Quagga.init({
+    inputStream:{
+      type:'LiveStream',
+      target:document.querySelector('#scanner'),
+      constraints:{ facingMode:'environment' }
+    },
+    locator:{ patchSize:'large', halfSample:false },
+    numOfWorkers:navigator.hardwareConcurrency || 4,
+    decoder:{ readers:['ean_reader','ean_8_reader','code_128_reader','upc_reader','code_39_reader'] },
+    locate:true
+  }, err => {
+    if(err){ console.error(err); return; }
+    Quagga.start();
+  });
+
+  Quagga.offDetected();
+  Quagga.onDetected(res => {
+    const code = res.codeResult.code;
+    navigator.vibrate?.(200);
+    stopScanner();
+    closeScanner();
+    openProduct(code);
+  });
+}
+
+function stopScanner(){
+  if(!scanning) return;
+  scanning = false;
+  Quagga.stop();
 }
 
 function openProduct(code){
   const p = inventory.find(i => i.code === code);
   prodCode.value = code;
-  prodName.value = p?.name || '';
-  prodQty.value = p?.qty || 1;
-  prodLoc.value = p?.loc || '';
-  productModal.classList.remove('hidden');
+
+  if(p){
+    productTitle.innerText = 'Sumar stock';
+    prodName.value = p.name;
+    prodUnit.value = p.unit;
+    prodQty.value = 1;
+    prodLoc.value = p.loc;
+  } else {
+    productTitle.innerText = 'Nuevo producto';
+    prodName.value = '';
+    prodUnit.value = 'unidad';
+    prodQty.value = 1;
+    prodLoc.value = '';
+  }
+
+  document.getElementById('productModal').classList.remove('hidden');
 }
 
 function saveProduct(){
   const code = prodCode.value;
+  const qty = Number(prodQty.value);
   let p = inventory.find(i => i.code === code);
-  if(p){ p.name=prodName.value; p.qty=prodQty.value; p.loc=prodLoc.value; }
-  else inventory.push({code,name:prodName.value,qty:prodQty.value,loc:prodLoc.value});
-  productModal.classList.add('hidden');
+
+  if(p){
+    p.qty += qty;
+  } else {
+    inventory.push({
+      code,
+      name: prodName.value,
+      qty,
+      unit: prodUnit.value,
+      loc: prodLoc.value
+    });
+  }
+
+  document.getElementById('productModal').classList.add('hidden');
   render();
 }
 
 function exportPDF(){
   const doc = new jspdf.jsPDF();
   doc.text('Inventario PRO',14,15);
-  doc.autoTable({ head:[['Código','Producto','Cantidad','Ubicación']], body:inventory.map(p=>[p.code,p.name,p.qty,p.loc]) });
+  doc.autoTable({
+    head:[['Código','Producto','Cantidad','Ubicación']],
+    body:inventory.map(p=>[p.code,p.name,`${p.qty} ${p.unit}`,p.loc])
+  });
   doc.save('inventario.pdf');
 }
 </script>
