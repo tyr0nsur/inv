@@ -3,141 +3,167 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Inventario Pro V9 - QuaggaJS Optimized</title>
+    <title>Inventario Pro X</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <style>
-        :root { --neon-green: #39ff14; --dark-bg: #1a1d21; }
-        body { background-color: var(--dark-bg); color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        
-        /* Contenedor de Cámara */
-        #interactive.viewport {
-            position: relative; width: 100%; height: 350px; background: #000;
-            border-bottom: 3px solid var(--neon-green); overflow: hidden;
+        :root {
+            --bg: #0b0e11;
+            --card: #151921;
+            --primary: #3d5afe;
+            --accent: #00e676;
+            --text: #ffffff;
         }
-        #interactive.viewport video, #interactive.viewport canvas {
-            width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;
+        body { 
+            background-color: var(--bg); 
+            color: var(--text); 
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            margin: 0; padding: 0; overflow-x: hidden;
         }
         
-        /* Visor de Enfoque */
-        .scanner-guide {
+        /* Escáner de pantalla completa parcial */
+        #scanner-viewport {
+            width: 100%;
+            height: 45vh;
+            background: #000;
+            position: relative;
+            overflow: hidden;
+        }
+        #scanner-viewport video, canvas { width: 100%; height: 100%; object-fit: cover; position: absolute; }
+        
+        .overlay-mask {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.8);
+            z-index: 5; pointer-events: none;
+            border-bottom: 2px solid var(--primary);
+        }
+
+        .focus-bracket {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 70%; height: 40%; border: 2px dashed rgba(57, 255, 20, 0.5);
-            z-index: 10; pointer-events: none; border-radius: 10px;
+            width: 260px; height: 160px; border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 20px; z-index: 6;
         }
 
-        .panel-ui {
-            background: #fff; color: #333; border-radius: 25px 25px 0 0;
-            margin-top: -30px; position: relative; padding: 25px 15px; min-height: 60vh;
+        /* Panel Inferior de Datos */
+        .data-panel {
+            background: var(--bg);
+            border-radius: 30px 30px 0 0;
+            margin-top: -30px;
+            padding: 25px;
+            position: relative;
+            z-index: 10;
+            min-height: 55vh;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
         }
 
-        .btn-scan {
-            background: var(--neon-green); color: #000; font-weight: bold;
-            border: none; border-radius: 15px; padding: 15px; width: 100%;
-            box-shadow: 0 4px 15px rgba(57, 255, 20, 0.3);
+        .product-card {
+            background: var(--card);
+            border-radius: 18px;
+            padding: 15px;
+            margin-bottom: 12px;
+            border: 1px solid #252a34;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .inventory-card {
-            background: #f8f9fa; border-radius: 12px; padding: 12px;
-            margin-bottom: 10px; border-left: 5px solid #0d6efd;
+        .qty-badge {
+            background: var(--primary);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 12px;
+            font-weight: bold;
         }
+
+        /* Modal Custom */
+        .modal-content {
+            background: var(--card);
+            color: white;
+            border: 1px solid #333;
+            border-radius: 24px;
+        }
+        .form-control, .form-select {
+            background: #252a34;
+            border: none;
+            color: white;
+            padding: 12px;
+        }
+        .form-control:focus { background: #2d3442; color: white; box-shadow: none; }
     </style>
 </head>
 <body>
 
-<div id="interactive" class="viewport">
-    <div class="scanner-guide"></div>
+<div id="scanner-viewport">
+    <div class="overlay-mask"></div>
+    <div class="focus-bracket"></div>
 </div>
 
-<div class="panel-ui shadow-lg">
-    <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h4 class="fw-bold m-0 text-dark">Almacén Inteligente</h4>
-            <button class="btn btn-sm btn-outline-danger" onclick="exportarPDF()">PDF Report</button>
-        </div>
-
-        <button id="btn-toggle" class="btn btn-scan mb-4" onclick="toggleScanner()">
-            🔌 ACTIVAR ESCÁNER
-        </button>
-
-        <h6 class="text-muted text-uppercase mb-3" style="font-size: 0.75rem; letter-spacing: 1px;">Productos en Inventario</h6>
-        <div id="lista-productos">
-            </div>
+<div class="data-panel">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold m-0">Inventario <span style="color: var(--primary);">Pro X</span></h4>
+        <button class="btn btn-sm btn-dark" onclick="location.reload()">🔄 Reset</button>
     </div>
+
+    <div id="empty-state" class="text-center py-5" style="display: none;">
+        <p class="text-muted">Apunta a un código de barras para comenzar</p>
+    </div>
+
+    <div id="inventory-list">
+        </div>
 </div>
 
-<div class="modal fade" id="modalProducto" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0">
-            <div class="modal-header bg-dark text-white">
-                <h5 class="modal-title" id="m-titulo">Gestión de Producto</h5>
-            </div>
-            <div class="modal-body p-4 text-dark">
-                <div id="form-nuevo" style="display:none;">
-                    <label class="small fw-bold">Nombre del Artículo</label>
-                    <input type="text" id="p-nombre" class="form-control mb-3" placeholder="Ej: Tornillos Acero">
-                    <label class="small fw-bold">Unidad de Medida</label>
-                    <select id="p-medida" class="form-select mb-3">
+<div class="modal fade" id="itemModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered px-3">
+        <div class="modal-content shadow-lg">
+            <div class="modal-body p-4">
+                <div id="new-item-section">
+                    <h5 class="fw-bold mb-3">Nuevo Producto</h5>
+                    <input type="text" id="p-name" class="form-control mb-3" placeholder="Nombre (ej. Coca Cola)">
+                    <select id="p-unit" class="form-select mb-3">
                         <option value="Unidades">Unidades</option>
-                        <option value="Litros">Litros</option>
                         <option value="Cajas">Cajas</option>
-                        <option value="Kg">Kilogramos</option>
+                        <option value="Kg">Kilos</option>
                     </select>
                 </div>
-                <div id="info-existente" class="text-center mb-3">
-                    <h3 id="txt-nombre" class="fw-bold"></h3>
-                    <span id="txt-codigo" class="badge bg-secondary"></span>
+                
+                <div id="existing-item-section" class="text-center" style="display:none;">
+                    <h2 id="m-display-name" class="fw-bold"></h2>
+                    <p id="m-display-stock" class="text-muted"></p>
                 </div>
-                <label class="d-block text-center small mb-2">Cantidad a registrar (Entrada/Salida)</label>
-                <div class="input-group input-group-lg w-75 mx-auto">
-                    <button class="btn btn-outline-secondary" onclick="ajustar(-1)">-</button>
-                    <input type="number" id="p-cantidad" class="form-control text-center fw-bold" value="1">
-                    <button class="btn btn-outline-secondary" onclick="ajustar(1)">+</button>
+
+                <div class="d-flex align-items-center justify-content-center gap-3 my-4">
+                    <button class="btn btn-outline-light rounded-circle" style="width:50px; height:50px;" onclick="adjust(-1)">-</button>
+                    <input type="number" id="p-qty" class="form-control text-center fs-3 fw-bold" style="width:100px;" value="1">
+                    <button class="btn btn-outline-light rounded-circle" style="width:50px; height:50px;" onclick="adjust(1)">+</button>
                 </div>
-            </div>
-            <div class="modal-footer border-0">
-                <button class="btn btn-light" onclick="cerrarModal()">Cancelar</button>
-                <button class="btn btn-primary px-4" onclick="guardar()">CONFIRMAR</button>
+
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary btn-lg fw-bold" style="background: var(--primary); border:none;" onclick="saveItem()">GUARDAR</button>
+                    <button class="btn btn-link text-muted" onclick="closeModal()">Cancelar</button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    let db = JSON.parse(localStorage.getItem('quagga_pro_db')) || {};
-    let codActual = "";
-    let escanerActivo = false;
-    const modalUI = new bootstrap.Modal(document.getElementById('modalProducto'));
+    let inventory = JSON.parse(localStorage.getItem('pro_x_db')) || {};
+    let tempCode = null;
+    let isModalOpen = false;
+    const modalUI = new bootstrap.Modal(document.getElementById('itemModal'));
 
-    // --- GENERADOR DE SONIDO (BEEP) ---
-    function playPi() {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        osc.frequency.value = 1000; gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        osc.start(); gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.1);
-        osc.stop(audioCtx.currentTime + 0.1);
-    }
+    // --- AUTO-INICIO AL CARGAR ---
+    window.addEventListener('load', () => {
+        initScanner();
+        renderList();
+    });
 
-    function toggleScanner() {
-        if(escanerActivo) {
-            Quagga.stop();
-            escanerActivo = false;
-            document.getElementById('btn-toggle').innerText = "🔌 ACTIVAR ESCÁNER";
-            document.getElementById('btn-toggle').style.background = "#39ff14";
-        } else {
-            iniciarQuagga();
-        }
-    }
-
-    function iniciarQuagga() {
+    function initScanner() {
         Quagga.init({
             inputStream: {
-                name: "Live", type: "LiveStream",
-                target: document.querySelector('#interactive'),
+                type: "LiveStream",
+                target: document.querySelector('#scanner-viewport'),
                 constraints: { facingMode: "environment", aspectRatio: {ideal: 1} }
             },
             locator: { patchSize: "medium", halfSample: true },
@@ -146,102 +172,99 @@
         }, (err) => {
             if (err) return;
             Quagga.start();
-            escanerActivo = true;
-            document.getElementById('btn-toggle').innerText = "🛑 DETENER ESCÁNER";
-            document.getElementById('btn-toggle').style.background = "#ff4d4d";
         });
 
-        // FEEDBACK VISUAL DE ENFOQUE
+        // Feedback visual de trazado
         Quagga.onProcessed(result => {
             const ctx = Quagga.canvas.ctx.overlay;
             const canvas = Quagga.canvas.dom.overlay;
             if (result) {
                 ctx.clearRect(0, 0, parseInt(canvas.width), parseInt(canvas.height));
-                if (result.boxes) {
-                    result.boxes.filter(b => b !== result.box).forEach(b => {
-                        Quagga.ImageDebug.drawPath(b, { x: 0, y: 1 }, ctx, { color: "blue", lineWidth: 2 });
-                    });
-                }
-                if (result.box) Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, ctx, { color: "#39ff14", lineWidth: 2 });
+                if (result.box) Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, ctx, { color: "#3d5afe", lineWidth: 3 });
             }
         });
 
         Quagga.onDetected(res => {
+            if (isModalOpen) return;
             const code = res.codeResult.code;
-            if (codActual === code) return;
-            codActual = code;
-            playPi();
-            if (navigator.vibrate) navigator.vibrate(100);
-            abrirGestion(code);
+            beep();
+            if (navigator.vibrate) navigator.vibrate(80);
+            
+            tempCode = code;
+            openEditor(code);
         });
     }
 
-    function abrirGestion(code) {
+    function openEditor(code) {
+        isModalOpen = true;
         Quagga.stop();
-        document.getElementById('p-cantidad').value = 1;
-        if (db[code]) {
-            document.getElementById('form-nuevo').style.display = "none";
-            document.getElementById('info-existente').style.display = "block";
-            document.getElementById('txt-nombre').innerText = db[code].nombre;
-            document.getElementById('txt-codigo').innerText = code;
+        document.getElementById('p-qty').value = 1;
+
+        if (inventory[code]) {
+            document.getElementById('new-item-section').style.display = 'none';
+            document.getElementById('existing-item-section').style.display = 'block';
+            document.getElementById('m-display-name').innerText = inventory[code].name;
+            document.getElementById('m-display-stock').innerText = `En stock: ${inventory[code].stock}`;
         } else {
-            document.getElementById('form-nuevo').style.display = "block";
-            document.getElementById('info-existente').style.display = "none";
+            document.getElementById('new-item-section').style.display = 'block';
+            document.getElementById('existing-item-section').style.display = 'none';
         }
         modalUI.show();
     }
 
-    function guardar() {
-        const cant = parseInt(document.getElementById('p-cantidad').value);
-        if (db[codActual]) {
-            db[codActual].stock += cant;
+    function saveItem() {
+        const qty = parseInt(document.getElementById('p-qty').value);
+        if (inventory[tempCode]) {
+            inventory[tempCode].stock += qty;
         } else {
-            const nom = document.getElementById('p-nombre').value;
-            if(!nom) return alert("Escribe un nombre");
-            db[codActual] = { nombre: nom, medida: document.getElementById('p-medida').value, stock: cant };
+            const name = document.getElementById('p-name').value;
+            if (!name) return alert("Escribe el nombre del producto");
+            inventory[tempCode] = { name, unit: document.getElementById('p-unit').value, stock: qty };
         }
-        localStorage.setItem('quagga_pro_db', JSON.stringify(db));
-        actualizarLista();
-        cerrarModal();
+        localStorage.setItem('pro_x_db', JSON.stringify(inventory));
+        renderList();
+        closeModal();
     }
 
-    function actualizarLista() {
-        const lista = document.getElementById('lista-productos');
-        lista.innerHTML = "";
-        Object.keys(db).reverse().forEach(id => {
-            lista.innerHTML += `
-                <div class="inventory-card d-flex justify-content-between align-items-center">
+    function renderList() {
+        const list = document.getElementById('inventory-list');
+        const keys = Object.keys(inventory);
+        
+        document.getElementById('empty-state').style.display = keys.length ? 'none' : 'block';
+        list.innerHTML = "";
+        
+        keys.reverse().forEach(code => {
+            const item = inventory[code];
+            list.innerHTML += `
+                <div class="product-card">
                     <div>
-                        <div class="fw-bold">${db[id].nombre}</div>
-                        <div class="text-muted small">${id}</div>
+                        <div class="fw-bold fs-5">${item.name}</div>
+                        <small class="text-muted">${code}</small>
                     </div>
-                    <div class="text-end">
-                        <span class="h5 m-0 fw-bold">${db[id].stock}</span><br>
-                        <small class="text-uppercase text-muted" style="font-size:0.6rem;">${db[id].medida}</small>
-                    </div>
+                    <div class="qty-badge">${item.stock}</div>
                 </div>`;
         });
     }
 
-    function cerrarModal() {
+    function closeModal() {
         modalUI.hide();
-        document.getElementById('p-nombre').value = "";
-        codActual = "";
-        setTimeout(() => { if(escanerActivo) iniciarQuagga(); }, 500);
+        isModalOpen = false;
+        document.getElementById('p-name').value = "";
+        tempCode = null;
+        setTimeout(() => initScanner(), 400);
     }
 
-    function ajustar(v) { document.getElementById('p-cantidad').value = parseInt(document.getElementById('p-cantidad').value) + v; }
+    function adjust(v) { document.getElementById('p-qty').value = parseInt(document.getElementById('p-qty').value) + v; }
 
-    function exportarPDF() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        doc.setFontSize(18); doc.text("REPORTE DE ALMACÉN", 14, 20);
-        const data = Object.keys(db).map(k => [k, db[k].nombre, db[k].stock, db[k].medida]);
-        doc.autoTable({ head: [['Código', 'Producto', 'Stock', 'Medida']], body: data, startY: 30 });
-        doc.save("Inventario_Final.pdf");
+    function beep() {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 1200; gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        osc.start(); gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.1);
+        osc.stop(ctx.currentTime + 0.1);
     }
-
-    actualizarLista();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
