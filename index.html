@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario Pro - Escáner</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; }
+        #reader { width: 100%; border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
+        .tab-content { padding-top: 20px; }
+        .badge-stock { font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-primary mb-4">
+    <div class="container-fluid">
+        <span class="navbar-brand mb-0 h1">📦 Inventario Pro Móvil</span>
+    </div>
+</nav>
+
+<div class="container">
+    <ul class="nav nav-pills nav-fill mb-4" id="pills-tab" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="tab-escaner" data-bs-toggle="pill" data-bs-target="#escaner-view">Escáner</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="tab-panel" data-bs-toggle="pill" data-bs-target="#panel-view" onclick="actualizarUI()">Panel Control</button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="escaner-view">
+            <div id="reader"></div>
+            
+            <div id="form-nuevo" class="card shadow-sm p-3 border-warning" style="display:none;">
+                <h5 class="text-warning">⚠️ Producto no registrado</h5>
+                <p>Código: <strong id="codigo-detectado"></strong></p>
+                <input type="text" id="nombre-prod" class="form-control mb-2" placeholder="Nombre (ej: Coca Cola 1L)">
+                <select id="medida-prod" class="form-select mb-2">
+                    <option value="Unidad">Unidad</option>
+                    <option value="Litro">Litro</option>
+                    <option value="Caja">Caja</option>
+                    <option value="Kg">Kilogramos</option>
+                </select>
+                <button class="btn btn-warning w-100" onclick="guardarNuevo()">Registrar y Sumar</button>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="panel-view">
+            <div class="d-flex justify-content-between mb-3">
+                <h4>Stock Actual</h4>
+                <button class="btn btn-danger btn-sm" onclick="exportarPDF()">📥 Exportar PDF</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover bg-white rounded shadow-sm">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Producto</th>
+                            <th>Cant.</th>
+                            <th>Medida</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-inventario">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let db = JSON.parse(localStorage.getItem('inventario_db')) || {};
+    let codigoActual = "";
+
+    // CONFIGURAR ESCÁNER
+    const html5QrCode = new Html5Qrcode("reader");
+    const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+
+    function onScanSuccess(decodedText) {
+        codigoActual = decodedText;
+        if (db[decodedText]) {
+            db[decodedText].stock += 1;
+            db[decodedText].ultima_vez = new Date().toLocaleString();
+            persistir();
+            alert(`+1 a ${db[decodedText].nombre}`);
+        } else {
+            document.getElementById('codigo-detectado').innerText = decodedText;
+            document.getElementById('form-nuevo').style.display = 'block';
+        }
+    }
+
+    function guardarNuevo() {
+        const nombre = document.getElementById('nombre-prod').value;
+        const medida = document.getElementById('medida-prod').value;
+        
+        if(!nombre) return alert("Pon un nombre");
+
+        db[codigoActual] = {
+            nombre: nombre,
+            medida: medida,
+            stock: 1,
+            ultima_vez: new Date().toLocaleString()
+        };
+
+        persistir();
+        document.getElementById('form-nuevo').style.display = 'none';
+        document.getElementById('nombre-prod').value = "";
+        alert("Producto registrado");
+    }
+
+    function persistir() {
+        localStorage.setItem('inventario_db', JSON.stringify(db));
+    }
+
+    function actualizarUI() {
+        const lista = document.getElementById('lista-inventario');
+        lista.innerHTML = "";
+        
+        for (let code in db) {
+            const p = db[code];
+            lista.innerHTML += `
+                <tr>
+                    <td><strong>${p.nombre}</strong><br><small class="text-muted">${code}</small></td>
+                    <td><span class="badge bg-info text-dark badge-stock">${p.stock}</span></td>
+                    <td>${p.medida}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="editar('${code}')">✏️</button>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    function editar(code) {
+        const nuevoStock = prompt(`Nuevo stock para ${db[code].nombre}:`, db[code].stock);
+        if (nuevoStock !== null) {
+            db[code].stock = parseInt(nuevoStock);
+            persistir();
+            actualizarUI();
+        }
+    }
+
+    function exportarPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(18);
+        doc.text("REPORTE DE INVENTARIO", 14, 20);
+        doc.setFontSize(10);
+        doc.text(`Fecha: ${new Date().toLocaleString()}`, 14, 28);
+
+        const filas = [];
+        for (let code in db) {
+            filas.push([code, db[code].nombre, db[code].stock, db[code].medida, db[code].ultima_vez]);
+        }
+
+        doc.autoTable({
+            startY: 35,
+            head: [['Código', 'Producto', 'Stock', 'Medida', 'Último Mov.']],
+            body: filas,
+        });
+
+        doc.save(`Inventario_${new Date().toLocaleDateString()}.pdf`);
+    }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
